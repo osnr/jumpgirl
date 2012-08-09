@@ -35,6 +35,8 @@ var ENEMY_MAP = [
 
 var GRAVITY = 2;
 
+var animMap = [];
+
 // tile access
 // -----------
 var tileFor = function(tX, tY) {
@@ -116,6 +118,8 @@ var t = 0;
 
 var scrollX = 0, scrollY = 0;
 
+var animMap = [];
+
 var tileImages = {
     1: getImage("cute/DirtBlock"),
     2: getImage("cute/WoodBlock"),
@@ -123,14 +127,46 @@ var tileImages = {
     4: getImage("cute/ChestOpen")
 };
 
-var drawTile = function(tX, tY) {
-    var tileImage = tileImages[tileFor(tX, tY)];
+var animFor = function(tX, tY) {
+    if (tY in animMap && tX in animMap[tY]) {
+        var anim = animMap[tY][tX];
 
-    if (!tileImage) {
-        return;
+        if (anim.type === "powerup") {
+            anim.yOffset -= 1;
+        }
+
+        return anim;
+    }
+};
+
+var drawTile = function(tX, tY) {
+    var anim = animFor(tX, tY);
+    if (anim) {
+        image(tileImages[anim.tile], TILE_WIDTH * tX + scrollX + anim.xOffset, TILE_HEIGHT * tY + scrollY + anim.yOffset);
+
+    } else {
+        var tileImage = tileImages[tileFor(tX, tY)];
+
+        if (!tileImage) {
+            return;
+        }
+
+        image(tileImages[tileFor(tX, tY)], TILE_WIDTH * tX + scrollX, TILE_HEIGHT * tY + scrollY);
+    }
+};
+
+var hitPowerup = function(tX, tY) {
+    if (!(tY in animMap)) {
+        animMap[tY] = [];
     }
 
-    image(tileImages[tileFor(tX, tY)], TILE_WIDTH * tX + scrollX, TILE_HEIGHT * tY + scrollY);
+    animMap[tY][tX] = {
+        tile: tileFor(tX, tY),
+        type: "powerup",
+
+        xOffset: 0,
+        yOffset: 0
+    };
 };
 
 var hero = {
@@ -283,34 +319,35 @@ var drawMapAboveHero = function() {
 // ----------
 
 // tiles adjacent to dudes
-var tileLeft = function(dude, amt) {
+var tileCoordsAdj = function(dude, dir, amt) {
+    var x, y;
     amt = amt || 1;
-    return tileFor(tileCoordsForPoint(dude.x + dude.cXOffset - amt, dude.y + dude.cYOffset));
+
+    if (dir === "left") {
+        x = dude.x + dude.cXOffset - amt;
+        y = dude.y + dude.cYOffset;
+    } else if (dir === "right") {
+        x = dude.x + dude.cXOffset + dude.cWidth + amt;
+        y = dude.y + dude.cYOffset;
+    } else if (dir === "below left") {
+        x = dude.x + dude.cXOffset;
+        y = dude.y + dude.cYOffset + dude.cHeight + amt;
+    } else if (dir === "below right") {
+        x = dude.x + dude.cXOffset + dude.cWidth;
+        y = dude.y + dude.cYOffset + dude.cHeight + amt;
+    } else if (dir === "above left") {
+        x = dude.x + dude.cXOffset;
+        y = dude.y + dude.cYOffset - amt;
+    } else if (dir === "above right") {
+        x = dude.x + dude.cXOffset + dude.cWidth;
+        y = dude.y + dude.cYOffset - amt;
+    }
+    
+    return tileCoordsForPoint(x, y);
 };
 
-var tileRight = function(dude, amt) {
-    amt = amt || 1;
-    return tileFor(tileCoordsForPoint(dude.x + dude.cXOffset + dude.cWidth + amt, dude.y + dude.cYOffset));
-};
-
-var tileBelowLeft = function(dude, amt) {
-    amt = amt || 1;
-    return tileFor(tileCoordsForPoint(dude.x + dude.cXOffset, dude.y + dude.cYOffset + dude.cHeight + amt));
-};
-
-var tileBelowRight = function(dude, amt) {
-    amt = amt || 1;
-    return tileFor(tileCoordsForPoint(dude.x + dude.cXOffset + dude.cWidth, dude.y + dude.cYOffset + dude.cHeight + amt));
-};
-
-var tileAboveLeft = function(dude, amt) {
-    amt = amt || 1;
-    return tileFor(tileCoordsForPoint(dude.x + dude.cXOffset, dude.y + dude.cYOffset - amt));
-};
-
-var tileAboveRight = function(dude, amt) {
-    amt = amt || 1;
-    return tileFor(tileCoordsForPoint(dude.x + dude.cXOffset + dude.cWidth, dude.y + dude.cYOffset - amt));
+var tileAdj = function(dude, dir, amt) {
+    return tileFor(tileCoordsAdj(dude, dir, amt));
 };
 
 // tile checks
@@ -322,54 +359,53 @@ var tileIsPowerup = function(tile) {
     return tile === 3;
 };
 
-var blockingTileLeft = function(dude, amt) {
-    return tileIsBlocking(tileLeft(dude, amt));
-};
+var tileAdjIsBlocking = function(dude, dir, amt) {
+    if (dir === "left" || dir === "right") {
+        return tileIsBlocking(tileAdj(dude, dir, amt));
 
-var blockingTileRight = function(dude, amt) {
-    return tileIsBlocking(tileRight(dude, amt));
-};
-
-var blockingTileBelow = function(dude, amt) {
-    return tileIsBlocking(tileBelowLeft(dude, amt)) ||
-        tileIsBlocking(tileBelowRight(dude, amt));
-};
-
-var blockingTileAbove = function(dude, amt) {
-    return tileIsBlocking(tileAboveLeft(dude, amt)) ||
-        tileIsBlocking(tileAboveRight(dude, amt));
+    } else if (dir === "below" || dir === "above") {
+        return tileIsBlocking(tileAdj(dude, dir + " left", amt)) ||
+            tileIsBlocking(tileAdj(dude, dir + " right", amt));
+    }
 };
 
 var checkXCollisions = function(dude) {
     // FIXME jump into block above you bug
-    if (blockingTileLeft(dude) && dude.xVelocity < 0) {
+    if (tileAdjIsBlocking(dude, "left") && dude.xVelocity < 0) {
         dude.xVelocity = 0;
-        while (blockingTileLeft(dude) && !blockingTileRight(dude)) {
+        while (tileAdjIsBlocking(dude, "left") && !tileAdjIsBlocking(dude, "right")) {
             dude.x += 1;
         }
-    } else if (blockingTileRight(dude) && dude.xVelocity > 0) {
+    } else if (tileAdjIsBlocking(dude, "right") && dude.xVelocity > 0) {
         dude.xVelocity = 0;
-        while (blockingTileRight(dude) && !blockingTileLeft(dude)) {
+        while (tileAdjIsBlocking(dude, "right") && !tileAdjIsBlocking(dude, "left")) {
             dude.x -= 1;
         }
     }
 };
 
 var checkYCollisions = function(dude) {
+    var tal, tar;
     var curTile = tileCoordsForPoint(dude.x, dude.y);
-    if (blockingTileBelow(dude) && dude.yVelocity > 0) {
+    if (tileAdjIsBlocking(dude, "below") && dude.yVelocity > 0) {
         dude.yVelocity = 0;
-        while (blockingTileBelow(dude)) {
+        while (tileAdjIsBlocking(dude, "below")) {
             dude.y -= 1;
         }
-    } else if (blockingTileAbove(dude) && dude.yVelocity < 0) {
+    } else if (tileAdjIsBlocking(dude, "above") && dude.yVelocity < 0) {
         dude.yVelocity = dude.yVelocity * -1/2;
 
-        if (tileIsPowerup(tileAboveLeft(dude)) || tileIsPowerup(tileAboveRight(dude))) {
-            debug("powerup");
+        tal = tileCoordsAdj(dude, "above left");
+        if (tileIsPowerup(tileFor(tal))) {
+            hitPowerup(tal);
+        } else {
+            tar = tileCoordsAdj(dude, "above right");
+            if (tileIsPowerup(tileFor(tal))) {
+                hitPowerup(tar);
+            }
         }
 
-        while (blockingTileAbove(dude)) {
+        while (tileAdjIsBlocking(dude, "above")) {
             dude.y += 1;
         }
     }
@@ -439,7 +475,7 @@ var updateHeroXVelocity = function() {
 
 var updateHeroYVelocity = function() {
     if (keyJump) {
-        if (hero.yVelocity === 0 && blockingTileBelow(hero, 2)) {
+        if (hero.yVelocity === 0 && tileAdjIsBlocking(hero, "below", 2)) {
             hero.jump = 1;
         }
             
