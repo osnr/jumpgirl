@@ -25,7 +25,7 @@ var TILE_MAP_COLS = TILE_MAP[0].length;
 // enemies
 var ENEMY_MAP = [
 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-[0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+[0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -34,8 +34,6 @@ var ENEMY_MAP = [
 ];
 
 var GRAVITY = 2;
-
-var animMap = [];
 
 // tile access
 // -----------
@@ -118,7 +116,7 @@ var t = 0;
 
 var scrollX = 0, scrollY = 0;
 
-var animMap = [];
+var animMap = {};
 
 var tileImages = {
     1: getImage("cute/DirtBlock"),
@@ -132,8 +130,14 @@ var animFor = function(tX, tY) {
         var anim = animMap[tY][tX];
 
         if (anim.type === "powerup") {
-            anim.yOffset -= 1;
+            anim.yOffset = anim.t*anim.t - 6*anim.t;
+
+            if (anim.t > 0 && anim.yOffset === 0) {
+                delete animMap[tY][tX];
+            }
         }
+        
+        anim.t += 1;
 
         return anim;
     }
@@ -155,18 +159,13 @@ var drawTile = function(tX, tY) {
     }
 };
 
-var hitPowerup = function(tX, tY) {
-    if (!(tY in animMap)) {
-        animMap[tY] = [];
-    }
+var dudeImages = {
+    1: getImage("cute/CharacterHornGirl"),
+    2: getImage("cute/EnemyBug")
+};
 
-    animMap[tY][tX] = {
-        tile: tileFor(tX, tY),
-        type: "powerup",
-
-        xOffset: 0,
-        yOffset: 0
-    };
+var powerImages = {
+    "armed": getImage("avatars/leaf-blue")
 };
 
 var hero = {
@@ -186,14 +185,36 @@ var hero = {
     cYOffset: 0,
     cHeight: TILE_HEIGHT,
 
-    im: getImage("cute/CharacterHornGirl"),
+    im: 1,
 
     // only the hero has the following properties, though
     jump: 0, // increases as you hold down JUMP, so a brief tap !== a long press
     running: false,
 
     facesLeft: false,
-    ySway: 0
+    ySway: 0,
+    
+    power: "none"
+};
+
+var hitPowerup = function(tX, tY) {
+    if (!(tY in animMap)) {
+        animMap[tY] = {};
+    }
+
+    animMap[tY][tX] = {
+        tile: tileFor(tX, tY),
+        type: "powerup",
+
+        xOffset: 0,
+        yOffset: 0,
+        
+        t: 0
+    };
+    
+    if (hero.power === "none") {
+        hero.power = "armed";
+    }
 };
 
 var drawDude = function(dude) {
@@ -229,13 +250,19 @@ var drawDude = function(dude) {
         dude.ySway = 0;
     }
     
+    var img = dudeImages[dude.im];
+     
     if (dude.facesLeft) {
         pushMatrix();
         scale(-1, 1);
-        image(dude.im, -(dude.x + scrollX + dude.im.width), dude.y + scrollY + dude.ySway);
+        image(img, -(dude.x + scrollX + img.width), dude.y + scrollY + dude.ySway);
         popMatrix();
     } else {
-        image(dude.im, dude.x + scrollX, dude.y + scrollY + dude.ySway);
+        image(img, dude.x + scrollX, dude.y + scrollY + dude.ySway);
+    }
+    
+    if (dude.power && dude.power !== "none") {
+        image(powerImages[dude.power], dude.x + scrollX, dude.y + scrollY + dude.ySway);
     }
 };
 
@@ -246,9 +273,7 @@ var enemies = [];
 var loadEnemy = function(id, tX, tY) {
     var im;
     
-    if (id === 1) {
-        im = getImage("cute/EnemyBug");
-    } else {
+    if (id === 0) {
         return;
     }
     
@@ -261,7 +286,7 @@ var loadEnemy = function(id, tX, tY) {
         
         wounded: false,
         
-        im: im,
+        im: id,
         
         ySway: 0,
         
@@ -397,11 +422,11 @@ var checkYCollisions = function(dude) {
 
         tal = tileCoordsAdj(dude, "above left");
         if (tileIsPowerup(tileFor(tal))) {
-            hitPowerup(tal);
+            hitPowerup(tal[0], tal[1]);
         } else {
             tar = tileCoordsAdj(dude, "above right");
             if (tileIsPowerup(tileFor(tal))) {
-                hitPowerup(tar);
+                hitPowerup(tar[0], tar[1]);
             }
         }
 
@@ -574,6 +599,9 @@ var update = function() {
 };
 
 var drawDebugInfo = function(scaleFactor) {
+    // TODO make this function clean
+    // (it was never intended to be permanent)
+    
     // draw a minimap of everything at 1/10 scale
     // draw the whole tilemap
     noStroke();
