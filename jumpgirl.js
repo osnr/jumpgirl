@@ -114,6 +114,8 @@ var dudeIntersectsDude = function(dude1, dude2) {
 
 var t = 0;
 
+var gameOver = false;
+
 var scrollX = 0, scrollY = 0;
 
 var animMap = {};
@@ -195,7 +197,8 @@ var hero = {
     ySway: 0,
     
     power: "none",
-    dead: false
+    dead: false,
+    rotation: 0
 };
 
 var hitPowerup = function(tX, tY) {
@@ -221,7 +224,8 @@ var hitPowerup = function(tX, tY) {
 var drawDude = function(dude) {
     var mod;
     
-    if (dude.wounded && round(t / 3) % 2 === 0) {
+    if (dude.wounded && !dude.dead && round(t / 3) % 2 === 0) {
+        // blink if wounded
         return;
     }
     
@@ -253,22 +257,29 @@ var drawDude = function(dude) {
     
     var img = dudeImages[dude.im];
 
+    var x = dude.x + scrollX,
+    y = dude.y + scrollY + dude.ySway;
+    
     var dying = dude.dead && (dude.y + scrollY) < height;
     
     if (dying) {
         pushMatrix();
-        dude.rotation += 1;
+        if (dude.yVelocity <= 0) {
+            dude.rotation += 100*sin(10*frameCount);
+        }
         
+        translate(x + img.width/2, y + img.height/2);
         rotate(dude.rotation);
+        translate(-x - img.width/2, -y - img.height/2);
     }
     
     if (dude.facesLeft) {
         pushMatrix();
         scale(-1, 1);
-        image(img, -(dude.x + scrollX + img.width), dude.y + scrollY + dude.ySway);
+        image(img, -x - img.width, y);
         popMatrix();
     } else {
-        image(img, dude.x + scrollX, dude.y + scrollY + dude.ySway);
+        image(img, x, y);
     }
 
     if (dude.power && dude.power !== "none") {
@@ -583,10 +594,16 @@ var updateHero = function() {
     hero.x += hero.xVelocity;
     hero.y += hero.yVelocity;
 
-    checkXCollisions(hero);
-    checkYCollisions(hero);
+    if (hero.dead) {
+        if (hero.y + scrollY + dudeImages[hero.im].height > height) {
+            gameOver = true;
+        }
+    } else {
+        checkXCollisions(hero);
+        checkYCollisions(hero);
     
-    checkEnemyCollisions();
+        checkEnemyCollisions();
+    }
 };
 
 var scroll = function() {
@@ -667,6 +684,19 @@ var timer = function() {
     t += 1;
 };
 
+var tGameOver = 0;
+var drawGameOver = function() {
+    if (tGameOver === 255) {
+        fill(255, 0, 0);
+        text("GAME OVER", width / 2, height / 2); 
+    } else {
+        fill(0, 0, 0, tGameOver);
+        rect(0, 0, width, height);
+    }
+    
+    tGameOver += 1;
+};
+
 var draw = function() {
     update();
     
@@ -678,5 +708,9 @@ var draw = function() {
     
     drawDebugInfo(1/10);
 
+    if (gameOver) {
+        drawGameOver();
+    }
+    
     timer();
 };
