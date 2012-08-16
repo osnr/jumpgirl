@@ -194,7 +194,8 @@ var hero = {
     facesLeft: false,
     ySway: 0,
     
-    power: "none"
+    power: "none",
+    dead: false
 };
 
 var hitPowerup = function(tX, tY) {
@@ -251,7 +252,16 @@ var drawDude = function(dude) {
     }
     
     var img = dudeImages[dude.im];
-     
+
+    var dying = dude.dead && (dude.y + scrollY) < height;
+    
+    if (dying) {
+        pushMatrix();
+        dude.rotation += 1;
+        
+        rotate(dude.rotation);
+    }
+    
     if (dude.facesLeft) {
         pushMatrix();
         scale(-1, 1);
@@ -260,9 +270,13 @@ var drawDude = function(dude) {
     } else {
         image(img, dude.x + scrollX, dude.y + scrollY + dude.ySway);
     }
-    
+
     if (dude.power && dude.power !== "none") {
         image(powerImages[dude.power], dude.x + scrollX, dude.y + scrollY + dude.ySway);
+    }
+    
+    if (dying) {
+        popMatrix();
     }
 };
 
@@ -520,8 +534,22 @@ var updateHeroYVelocity = function() {
         // (this is as fast as you can ever fall)
         hero.yVelocity = 30;
     }
+};
+
+var killHero = function() {
+    hero.yVelocity -= 100;
+    hero.dead = true;
+};
+
+var woundHero = function() {
+    hero.wounded = true;
+    hero.lastWounded = t;
     
-    hero.yVelocity += GRAVITY;
+    if (hero.power !== "none") {
+        hero.power = "none";
+    } else {
+        killHero();
+    }
 };
 
 var checkEnemyCollisions = function() {
@@ -540,8 +568,7 @@ var checkEnemyCollisions = function() {
                 enemies.splice(i, 1);
             } else {
                 // enemy hit us!
-                hero.wounded = true;
-                hero.lastWounded = t;
+                woundHero();
             }
         }
     }    
@@ -550,6 +577,8 @@ var checkEnemyCollisions = function() {
 var updateHero = function() {
     updateHeroXVelocity();
     updateHeroYVelocity();
+    
+    hero.yVelocity += GRAVITY;
     
     hero.x += hero.xVelocity;
     hero.y += hero.yVelocity;
